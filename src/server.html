@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Browser-to-Browser File Transfer (WebRTC)</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 2em; }
+    textarea { width: 100%; height: 100px; margin-top: 0.5em; }
+    input[type="file"] { margin-top: 1em; }
+    button { margin-top: 1em; }
+    .section { margin-top: 2em; border-top: 1px solid #ccc; padding-top: 1em; }
+    .status { margin-top: 1em; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Browser-to-Browser File Transfer (WebRTC)</h1>
+
+  <div class="section">
+    <h2>1. Role Selection</h2>
+    <button id="start-server">Start as Server</button>
+    <button id="start-client">Start as Client</button>
+  </div>
+
+  <div class="section">
+    <h2>2. Signaling</h2>
+    <p>Manually copy/paste the offer/answer below between browser tabs:</p>
+
+    <label>Local SDP (copy to other peer):</label>
+    <textarea id="local-sdp" readonly></textarea>
+
+    <label>Remote SDP (paste from other peer):</label>
+    <textarea id="remote-sdp"></textarea>
+    <button id="submit-remote-sdp">Submit Remote SDP</button>
+  </div>
+
+  <div class="section" id="client-section" style="display:none;">
+    <h2>3. Client: Select and Send File</h2>
+    <input type="file" id="file-input">
+    <button id="send-file">Send File</button>
+  </div>
+
+  <div class="section" id="server-section" style="display:none;">
+    <h2>3. Server: Waiting for File...</h2>
+  </div>
+
+  <div class="status" id="status">Status: Waiting for role selection.</div>
+
+  <script>
+    let pc;
+    let dataChannel;
+    let isServer = false;
+    const localSDP = document.getElementById('local-sdp');
+    const remoteSDP = document.getElementById('remote-sdp');
+    const submitRemoteSDP = document.getElementById('submit-remote-sdp');
+    const fileInput = document.getElementById('file-input');
+    const sendFileBtn = document.getElementById('send-file');
+    const status = document.getElementById('status');
+
+    // Create PeerConnection
+    async function createPeerConnection() {
+      pc = new RTCPeerConnection();
+
+      pc.onicecandidate = e => {
+        if (e.candidate === null) {
+          localSDP.value = JSON.stringify(pc.localDescription);
+        }
+      };
+
+      pc.ondatachannel = event => {
+        // Only triggered on the server
+        dataChannel = event.channel;
+        setupDataChannel();
+        status.textContent = 'Status: Data channel received. Ready to receive file.';
+      };
+    }
+
+    function setupDataChannel() {
+      const receivedChunks = [];
+      let receivedSize = 0;
+      let expectedSize = null;
+      let fileName = 'uploaded-file';
+
+      dataChannel.onmessage = e => {
+        if (typeof e.data === 'string') {
+          // Metadata header (JSON): { name, size }
+          const meta = JSON.parse(e.data);
+          expectedSize = meta.size;
+          fileName = meta.name;
+          receivedChunks.length = 0;
+          receivedSize = 0;
+          status.textContent = `Status: Receiving "${fileName}" (${expectedSize} bytes)...`;
+        } else {
+          // Binary chunk
+          receivedChunks.push(e.data);
+          receivedSize += e.data.byteLength;
+          status.textContent = `Status: Receiving... ${receivedSize}/${expectedSize} bytes`;
+
+          if (receivedSize >= expectedSize) {
+            const blob = new Blob(receivedChunks);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            a.click();
+            status.textContent = `Status: File received and download triggered (${fileName}).`;
+          }
+        }
+      };
+
+      dataChannel.onopen = () => {
+        status.textContent = 'Status: Data channel open and ready.';
+      };
+    }
+
+    // Server setup
+    document.getElementById('start-server').onclick = async () => {
+      isServer = true;
+      document.getElementById('server-section').style.display = 'block';
+      document.getElementById('client-section').style.display = 'none';
+      status.textContent = 'Status: Server started. Waiting for connection...';
+
+      await createPeerConnection();
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+    };
+
+    // Client setup
+    document.getElementById('start-client').onclick = async () => {
+      isServer = false;
+      document.getElementById('client-section').style.display = 'block';
+      document.getElementById('server-section').style.display = 'none';
+      status.textContent = 'Status: Client started. Waiting for signaling...';
+
+      await createPeerConnection();
+
+      // Client creates DataChannel
+      dataChannel = pc.createDataChannel('file');
+      setupDataChannel();
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+    };
+
+    // Set remote description
+    submitRemoteSDP.onclick = async () => {
+      const desc = JSON.parse(remoteSDP.value);
+      await pc.setRemoteDescription(desc);
+
+      if (desc.type === 'offer') {
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+      }
+
+      status.textContent = 'Status: Remote SDP applied. Awaiting connection...';
+    };
+
+    // Send file over data channel
+    sendFileBtn.onclick = async () => {
+      const file = fileInput.files[0];
+      if (!file || !dataChannel || dataChannel.readyState !== 'open') {
+        alert('File or data channel not ready.');
+        return;
+      }
+
+      status.textContent = `Status: Sending "${file.name}" (${file.size} bytes)...`;
+
+      // Send metadata first
+      dataChannel.send(JSON.stringify({ name: file.name, size: file.size }));
+
+      // Send file as binary chunks
+      const chunkSize = 16384;
+      const stream = file.stream().getReader();
+
+      const pump = async () => {
+        const { done, value } = await stream.read();
+        if (done) {
+          status.textContent = `Status: File "${file.name}" sent successfully.`;
+          return;
+        }
+        dataChannel.send(value);
+        await pump();
+      };
+      await pump();
+    };
+  </script>
+</body>
+</html>
