@@ -2,6 +2,12 @@
 
 peer to peer file transfer over LAN using QR codes
 
+# TODO
+
+current implementation uses SDP, but this is a bit of a pain to copy in the information. 
+
+perhaps a STUN connection would be better (and easier) to utilize. 
+if that doesn't work, a TURN relay would be the next best thing, but security may be a concern
 
 # NOTES
 bridge / proxy to WSL system:
