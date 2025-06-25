@@ -58,7 +58,9 @@
 
     // Create PeerConnection
     async function createPeerConnection() {
-      pc = new RTCPeerConnection();
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
 
       pc.onicecandidate = e => {
         if (e.candidate === null) {
@@ -95,7 +97,8 @@
           receivedSize += e.data.byteLength;
           status.textContent = `Status: Receiving... ${receivedSize}/${expectedSize} bytes`;
 
-          if (receivedSize >= expectedSize) {
+        //   if (receivedSize >= expectedSize) 
+          {
             const blob = new Blob(receivedChunks);
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
