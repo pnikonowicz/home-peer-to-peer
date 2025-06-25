@@ -9,6 +9,8 @@ current implementation uses SDP, but this is a bit of a pain to copy in the info
 perhaps a STUN connection would be better (and easier) to utilize. 
 if that doesn't work, a TURN relay would be the next best thing, but security may be a concern
 
+a signal server would need to be used in order to automate the SDP offer information transmission
+
 # NOTES
 bridge / proxy to WSL system:
 netsh interface portproxy add v4tov4 listenaddress=192.168.50.16 listenport=80 connectaddress=172.21.213.123 connectport=8080
