@@ -71,12 +71,12 @@
       pc.ondatachannel = event => {
         // Only triggered on the server
         dataChannel = event.channel;
-        setupDataChannel();
+        setupDataChannel(event.channel);
         status.textContent = 'Status: Data channel received. Ready to receive file.';
       };
     }
 
-    function setupDataChannel() {
+    function setupDataChannel(dataChannel) {
       const receivedChunks = [];
       let receivedSize = 0;
       let expectedSize = null;
@@ -94,10 +94,10 @@
         } else {
           // Binary chunk
           receivedChunks.push(e.data);
-          receivedSize += e.data.byteLength;
+          receivedSize += e.data.length;
           status.textContent = `Status: Receiving... ${receivedSize}/${expectedSize} bytes`;
 
-        //   if (receivedSize >= expectedSize) 
+          if (receivedSize >= expectedSize) 
           {
             const blob = new Blob(receivedChunks);
             const a = document.createElement('a');
@@ -171,7 +171,6 @@
       dataChannel.send(JSON.stringify({ name: file.name, size: file.size }));
 
       // Send file as binary chunks
-      const chunkSize = 16384;
       const stream = file.stream().getReader();
 
       const pump = async () => {
